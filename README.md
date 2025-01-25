@@ -31,6 +31,9 @@ CewlAI is a domain generation tool that uses Google's Gemini AI to create potent
 3. Set up your Google API key:
    `export GEMINI_API_KEY='your-api-key-here'`
 
+4. Set up OpenAI API key
+   `export OPENAI_API_KEY='your-api-key-here'`
+
 ## Input Methods
 
 The tool supports multiple ways to provide seed domains:
@@ -100,6 +103,7 @@ python main.py -tL domains.txt --loop 3 --limit 1000 -o output.txt
 -v, --verbose: Enable verbose output
 --no-repeats: Prevent duplicate domains across iterations
 --force: Skip token usage confirmation
+--openai: Use OpenAI API instead of Gemini
 ```
 
 ## Examples

@@ -9,6 +9,7 @@ import warnings
 import tiktoken
 
 import google.generativeai as genai
+import openai
 
 def configure_llm():
     """
@@ -63,6 +64,8 @@ def parse_args():
                         help="Output file to write results to.")
     parser.add_argument("--force", action="store_true",
                         help="Skip token usage confirmation.")
+    parser.add_argument("--openai", action="store_true",
+                        help="Use OpenAI's API instead of Google's.")
     
     return parser.parse_args()
 
@@ -93,7 +96,7 @@ def get_seed_domains(args):
 
     return list(seed_domains)
 
-def generate_new_domains(chat_session, domain_list, verbose=False):
+def generate_new_domains(chat_session, domain_list, verbose=False, use_openai=False):
     """
     Given an LLM chat session and a domain list, prompt the LLM to produce new domains.
     We randomize domain_list first, then craft a system prompt to get predicted variations.
@@ -118,8 +121,21 @@ def generate_new_domains(chat_session, domain_list, verbose=False):
             print(prompt_text)
             print()
 
-        response = chat_session.send_message(prompt_text)
-        raw_output = response.text.strip()
+        if use_openai == False:
+            # Use Gemini
+            response = chat_session.send_message(prompt_text)
+            raw_output = response.text.strip()
+        else:
+            # Use OpenAI
+            client = openai.OpenAI()
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": "You are tasked with thinking of similar domains."},
+                    {"role": "user", "content": prompt_text}
+                ]
+            )
+            raw_output = response.choices[0].message.content
 
         # Split the LLM output on newlines to guess domain lines
         new_candidates = [line.strip() for line in raw_output.split("\n") if line.strip()]
@@ -178,8 +194,12 @@ def estimate_tokens(domain_list):
 def main():
     args = parse_args()
 
+    use_openai = args.openai
+
     # Prepare the LLM chat session
-    chat_session = configure_llm()
+    if not use_openai:
+        # Google Gemini
+        chat_session = configure_llm()
 
     # Get initial domain list and check if using stdin
     using_stdin = not sys.stdin.isatty()
@@ -222,7 +242,11 @@ def main():
         if args.verbose:
             print(f"\n[+] LLM Generation Loop {i+1}/{args.loop}...")
 
-        new_domains = generate_new_domains(chat_session, list(all_domains), verbose=args.verbose)
+        if not use_openai:
+            new_domains = generate_new_domains(chat_session, list(all_domains), verbose=args.verbose, use_openai=use_openai)
+        else:
+            chat_session = None
+            new_domains = generate_new_domains(chat_session, list(all_domains), verbose=args.verbose, use_openai=use_openai)
         if args.no_repeats:
             # Filter out anything we already have
             new_domains = [d for d in new_domains if d not in all_domains]
