@@ -110,7 +110,7 @@ def generate_new_domains(chat_session, domain_list, verbose=False):
             "It's your job to output unique new domains that are likely to exist "
             "based on variations or predictive patterns you see in the existing list. "
             "In your output, none of the domains should repeat. "
-            "Please output them one domain per line."
+            "Please output them one domain per line. Only output the domains, no other text. No paths. No protocols. Output should be a list of domains."
         )
 
         if verbose:
