@@ -34,6 +34,10 @@ CewlAI is a domain generation tool that uses Google's Gemini AI to create potent
 4. Set up OpenAI API key
    `export OPENAI_API_KEY='your-api-key-here'`
 
+5. (Optional) Set up White Rabbit Neo API key:
+   - Get your API key from [Kindo AI](https://app.kindo.ai/)
+   `export KINDO_API_KEY='your-api-key-here'`
+
 ## Input Methods
 
 The tool supports multiple ways to provide seed domains:
@@ -104,7 +108,28 @@ python main.py -tL domains.txt --loop 3 --limit 1000 -o output.txt
 --no-repeats: Prevent duplicate domains across iterations
 --force: Skip token usage confirmation
 --openai: Use OpenAI API instead of Gemini
+-m, --model: Specify model to use (gemini, openai, whiterabbitneo, ollama)
 ```
+
+## Models
+
+### Gemini (Default)
+The default model uses Google's Gemini AI. Requires `GEMINI_API_KEY` to be set.
+
+### OpenAI
+Use OpenAI's models by specifying `-m openai`. Requires `OPENAI_API_KEY` to be set.
+
+### White Rabbit Neo
+Use White Rabbit Neo by specifying `-m whiterabbitneo`. This model is powered by Kindo AI's WhiteRabbitNeo-33B-DeepSeekCoder model. Requires `KINDO_API_KEY` to be set.
+
+Example usage:
+```bash
+export KINDO_API_KEY='your-api-key-here'
+python main.py -m whiterabbitneo -t example.com
+```
+
+### Ollama
+Use local Ollama models by specifying `-m ollama`. Requires Ollama to be installed with at least one model.
 
 ## Examples
 
@@ -119,6 +144,9 @@ Generate domains from a list with multiple iterations:
 
 Verbose output with no repeats:
 `python main.py -t example.com -v --no-repeats`
+
+Using White Rabbit Neo with verbose output:
+`python main.py -m whiterabbitneo -t example.com -v`
 
 ## Output
 
@@ -159,9 +187,9 @@ Using -v provides detailed information about the generation process:
 ## How It Works
 
 1. Seed Collection: The tool takes your input domains as seeds
-2. AI Analysis: Gemini AI analyzes patterns in the seed domains
+2. AI Analysis: The selected model (Gemini, OpenAI, White Rabbit Neo, or Ollama) analyzes patterns in the seed domains
 3. Generation: New domains are generated based on recognized patterns
 4. Filtering: Results are filtered to remove duplicates and invalid formats
 5. Output: Unique, new domains are presented in the specified format
 
-Remember that this tool is meant for legitimate security testing and research purposes only. 
+Remember that this tool is meant for legitimate security testing and research purposes only.

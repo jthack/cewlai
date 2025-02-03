@@ -192,7 +192,7 @@ def parse_args():
     parser.add_argument("--force", action="store_true",
                         help="Skip token usage confirmation.")
     parser.add_argument("-m", "--model", type=str,
-                        help="Specify a model to use. Supports `gemini`, `openai`,`ollama`",
+                        help="Specify a model to use. Supports `gemini`, `openai`,`ollama`, `whiterabbitneo`",
                         default="gemini")
     parser.add_argument("-c", "--model-config", type=str,
                         help="Location of model config file. Uses ~/.cewlai-model-config by default.",
@@ -246,7 +246,7 @@ def generate_new_domains(chat_session, domain_list, verbose=False):
             "It's your job to output unique new domains that are likely to exist "
             "based on variations or predictive patterns you see in the existing list. "
             "In your output, none of the domains should repeat. "
-            "Please output them one domain per line. Only output the domains, no other text. No paths. No protocols. Output should be a list of domains. If they only pass in a root domain, still output potential subdomains."
+            "Please output them one domain per line. Only output the domains, no other text. No paths. No protocols. Output should be a list of domains. If they only pass in a root domain, still output potential subdomains. For example, if they pass in 'google.com', output 'mail.google.com', 'drive.google.com', 'docs.google.com', etc. However if they pass in: sub.example.com\nsub2.example.com\nsub-a.example.com then output varuations like sub4.example.com\nsub5.example.com\nsub-b.example.com. \n"
         )
 
         if verbose:
@@ -303,11 +303,158 @@ def estimate_tokens(domain_list):
     return truncated_domains, total_tokens
 
 
+def generate_domains_with_wrn(domain_list, verbose=False):
+    """
+    A standalone function to generate domains using White Rabbit Neo.
+    This is kept separate from the LLM abstraction for simplicity and reliability.
+    """
+    import openai
+    import os
+    import random
+
+    try:
+        client = openai.OpenAI(
+            base_url="https://llm.kindo.ai/v1",
+            api_key=os.environ["KINDO_API_KEY"],
+            default_headers={
+                "content-type": "application/json",
+                "api-key": os.environ["KINDO_API_KEY"]
+            }
+        )
+    except (openai.OpenAIError, KeyError) as e:
+        print("Error initializing White Rabbit Neo: Make sure KINDO_API_KEY environment variable is set.", file=sys.stderr)
+        sys.exit(1)
+
+    # Randomize order of domains before sending to the model
+    shuffled_domains = domain_list[:]
+    random.shuffle(shuffled_domains)
+
+    # Build the prompt
+    prompt_text = (
+        "Here is a list of domains:\n"
+        f"{', '.join(shuffled_domains)}\n\n"
+        "It's your job to output unique new domains that are likely to exist "
+        "based on variations or predictive patterns you see in the existing list. "
+        "In your output, none of the domains should repeat. "
+        "Please output them one domain per line. Only output the domains, no other text. No paths. No protocols. Output should be a list of domains. If they only pass in a root domain, still output potential subdomains."
+    )
+
+    if verbose:
+        print("[DEBUG] Prompt to WRN:")
+        print(prompt_text)
+        print()
+
+    try:
+        response = client.chat.completions.create(
+            model="/models/WhiteRabbitNeo-33B-DeepSeekCoder",
+            messages=[
+                {"role": "system", "content": "You are tasked with thinking of similar domains."},
+                {"role": "user", "content": prompt_text}
+            ],
+            temperature=1,
+            top_p=0.95,
+            max_tokens=8192,
+            stream=False,
+        )
+        raw_output = response.choices[0].message.content.strip()
+        new_candidates = re.findall(DOMAIN_REGEX, raw_output)
+        return new_candidates
+
+    except Exception as e:
+        print(f"\n[!] Error during WRN domain generation: {str(e)}", file=sys.stderr)
+        return []
+
+
 def main():
     args = parse_args()
 
     parse_model_config(args.model_config)
 
+    # Get initial domain list and check if using stdin
+    using_stdin = not sys.stdin.isatty()
+    seed_domains = get_seed_domains(args)
+    if not seed_domains:
+        print("[!] No seed domains provided. Use -t, -tL, or pipe domains to stdin.", file=sys.stderr)
+        sys.exit(1)
+
+    # Get token-truncated domain list and count
+    seed_domains, estimated_tokens = estimate_tokens(seed_domains)
+    estimated_total = estimated_tokens * args.loop
+
+    # Handle White Rabbit Neo separately from other models
+    if str(args.model).lower() == "whiterabbitneo":
+        print("Using White Rabbit Neo model")
+        
+        # Skip confirmation if using --force or stdin
+        if not (args.force or using_stdin):
+            print(f"\nEstimated token usage:")
+            print(f"* Per iteration: ~{estimated_tokens} tokens")
+            print(f"* Total for {args.loop} loops: ~{estimated_total} tokens")
+            response = input("\nContinue? [y/N] ").lower()
+            if response != 'y':
+                print("Aborting.")
+                sys.exit(0)
+        elif args.verbose:
+            print(f"\nEstimated token usage:")
+            print(f"* Per iteration: ~{estimated_tokens} tokens")
+            print(f"* Total for {args.loop} loops: ~{estimated_total} tokens")
+
+        # We store all domains in a global set to avoid duplicates across loops
+        all_domains = set(seed_domains)
+        # Keep track of original domains to exclude from output
+        original_domains = set(seed_domains)
+
+        print("\nGenerating domains... This may take a minute or two depending on the number of iterations.")
+
+        # Loop for the specified number of times
+        for i in range(args.loop):
+            if args.verbose:
+                print(f"\n[+] WRN Generation Loop {i + 1}/{args.loop}...")
+
+            new_domains = generate_domains_with_wrn(list(all_domains), verbose=args.verbose)
+
+            if args.no_repeats:
+                # Filter out anything we already have
+                new_domains = [d for d in new_domains if d not in all_domains]
+
+            # Add them to our global set
+            before_count = len(all_domains)
+            for dom in new_domains:
+                all_domains.add(dom)
+            after_count = len(all_domains)
+
+            if args.verbose:
+                print(f"[DEBUG] WRN suggested {len(new_domains)} new domain(s). "
+                      f"{after_count - before_count} were added (others were duplicates?).")
+
+            # If we have a limit, check it now
+            if 0 < args.limit <= len(all_domains):
+                if args.verbose:
+                    print(f"[!] Reached limit of {args.limit} domains.")
+                break
+
+        # Get only the new domains (excluding original seed domains)
+        new_domains = sorted(all_domains - original_domains)
+
+        # Output handling
+        if args.output:
+            with open(args.output, 'w') as f:
+                for dom in new_domains:
+                    f.write(f"{dom}\n")
+            print(f"\nResults written to: {args.output}")
+        else:
+            print("\n=== New Generated Domains ===")
+            for dom in new_domains:
+                print(dom)
+
+        if args.verbose:
+            print(f"\n[DEBUG] Original domains: {len(original_domains)}")
+            print(f"[DEBUG] New domains generated: {len(new_domains)}")
+            print(f"[DEBUG] Total domains processed: {len(all_domains)}")
+        
+        sys.exit(0)
+
+    # Handle other models using the LLM abstraction
     match (str(args.model).lower()):
         case "gemini":
             print("Using model " + args.model)
@@ -348,23 +495,8 @@ def main():
                 }
             )
         case _:
-            print("Model type must be either 'gemini','openai', or 'ollama'", file=sys.stderr)
+            print("Model type must be either 'gemini','openai','whiterabbitneo', or 'ollama'", file=sys.stderr)
             sys.exit(1)
-
-    # Get initial domain list and check if using stdin
-    using_stdin = not sys.stdin.isatty()
-    seed_domains = get_seed_domains(args)
-    if not seed_domains:
-        print("[!] No seed domains provided. Use -t, -tL, or pipe domains to stdin.", file=sys.stderr)
-        sys.exit(1)
-
-    # Get token-truncated domain list and count
-    seed_domains, estimated_tokens = estimate_tokens(seed_domains)
-    estimated_total = estimated_tokens * args.loop
-
-    if args.verbose:
-        if len(seed_domains) < len(get_seed_domains(args)):
-            print(f"\n[!] Input truncated to {len(seed_domains)} domains to stay under token limit")
 
     # Skip confirmation if using --force or stdin
     if not (args.force or using_stdin):
@@ -413,7 +545,6 @@ def main():
             if args.verbose:
                 print(f"[!] Reached limit of {args.limit} domains.")
             break
-
 
     # Get only the new domains (excluding original seed domains)
     new_domains = sorted(all_domains - original_domains)
