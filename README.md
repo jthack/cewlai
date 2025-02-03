@@ -1,6 +1,8 @@
 # CewlAI
 
-CewlAI is a domain generation tool that uses Google's Gemini AI to create potential domain variations based on seed domains. It's inspired by tools like CeWL but focuses on domain name pattern recognition and generation.
+<img width="758" alt="Screenshot 2025-01-24 at 9 51 33 PM" src="https://github.com/user-attachments/assets/a01d3ad7-733b-4822-b1e4-42b931194276" />
+
+CewlAI is a domain generation tool that uses Google's Gemini AI to create potential domain variations based on seed domains. It's inspired by dnscewl which was inspired by CeWL, but this tool focuses on domain name pattern recognition and generation.
 
 ## Features
 
@@ -20,14 +22,17 @@ CewlAI is a domain generation tool that uses Google's Gemini AI to create potent
 ## Installation
 
 1. Clone the repository:
-   git clone https://github.com/jthack/cewlai.git
-   cd cewlai
+   `git clone https://github.com/jthack/cewlai.git`
+   `cd cewlai`
 
 2. Install required packages:
-   pip install google-generativeai
+   `pip install -r requirements.txt`
 
 3. Set up your Google API key:
-   export GEMINI_API_KEY='your-api-key-here'
+   `export GEMINI_API_KEY='your-api-key-here'`
+
+4. Set up OpenAI API key
+   `export OPENAI_API_KEY='your-api-key-here'`
 
 ## Input Methods
 
@@ -52,10 +57,6 @@ The tool supports multiple ways to provide seed domains:
 
 Note: When using stdin, the token usage confirmation is automatically skipped.
 
-You can also combine these methods:
-   ```
-   cat additional_domains.txt | python main.py -t example.com -tL domains.txt
-   ```
 
 ## Token Management
 
@@ -67,7 +68,8 @@ The tool automatically manages token usage to stay within API limits:
 - Use `--force` to skip the token usage confirmation prompt
 
 Example output with truncation:
-   ```
+
+```
    $ cat large_domain_list.txt | python main.py -v
    
    [!] Input truncated to 15423 domains to stay under token limit
@@ -77,7 +79,7 @@ Example output with truncation:
    * Total for 1 loops: ~98750 tokens
    
    Continue? [y/N]
-   ```
+```
 
 ## Usage
 
@@ -92,25 +94,31 @@ python main.py -tL domains.txt --loop 3 --limit 1000 -o output.txt
 
 ### Arguments
 
-- -t, --target: Specify a single seed domain
-- -tL, --target-list: Input file containing seed domains (one per line)
-- --loop: Number of AI generation iterations (default: 1)
-- --limit: Maximum number of domains to generate (0 = unlimited)
-- -o, --output: Write results to specified file
-- -v, --verbose: Enable verbose output
-- --no-repeats: Prevent duplicate domains across iterations
-- --force: Skip token usage confirmation
+```
+-t, --target: Specify a single seed domain
+-tL, --target-list: Input file containing seed domains (one per line)
+--loop: Number of AI generation iterations (default: 1)
+--limit: Maximum number of domains to generate (0 = unlimited)
+-o, --output: Write results to specified file
+-v, --verbose: Enable verbose output
+--no-repeats: Prevent duplicate domains across iterations
+--force: Skip token usage confirmation
+--openai: Use OpenAI API instead of Gemini
+```
 
 ## Examples
 
+Main use case (unix-way):
+`cat domains.txt | python main.py`
+
 Generate domains based on a single target:
-python main.py -t example.com -o results.txt
+`python main.py -t example.com -o results.txt`
 
 Generate domains from a list with multiple iterations:
-python main.py -tL company_domains.txt --loop 3 --limit 1000 -o generated_domains.txt
+`python main.py -tL company_domains.txt --loop 3 --limit 1000 -o generated_domains.txt`
 
 Verbose output with no repeats:
-python main.py -t example.com -v --no-repeats
+`python main.py -t example.com -v --no-repeats`
 
 ## Output
 
@@ -140,11 +148,13 @@ test.example.com
 ### Verbose Output
 
 Using -v provides detailed information about the generation process:
-[+] LLM Generation Loop 1/3...
-[DEBUG] LLM suggested 50 new domain(s). 45 were added (others were duplicates?)
-[DEBUG] Original domains: 10
-[DEBUG] New domains generated: 45
-[DEBUG] Total domains processed: 55
+```
+[+] LLM Generation Loop 1/3...  
+[DEBUG] LLM suggested 50 new domain(s). 45 were added (others were duplicates?)  
+[DEBUG] Original domains: 10    
+[DEBUG] New domains generated: 45  
+[DEBUG] Total domains processed: 55  
+```
 
 ## How It Works
 
